@@ -6,14 +6,62 @@ Strategy:
   2. Group spans whose baseline Y values fall within BASELINE_TOLERANCE of each other.
   3. Sort groups top-to-bottom → these are the visual lines.
   4. Optionally exclude spans that fall inside image/table bounding boxes.
+
+Fixes applied:
+  - BASELINE_TOLERANCE raised to 4.0pt to absorb OCR baseline jitter that was
+    splitting one visual line into multiple fragments (causing irregular counts).
+  - _has_visible_ink() strips whitespace AND Unicode replacement characters
+    (U+FFFD) so garbled OCR glyphs don't inflate the line count.
+  - Group representative Y is the running average of the group, not just the
+    first span, preventing cumulative drift from creating phantom extra lines.
 """
 
+import unicodedata
 from dataclasses import dataclass, field
-from typing import List, Tuple
+from typing import List
 import fitz  # PyMuPDF
 
 
-BASELINE_TOLERANCE = 2.5  # points; spans within this Y-range share a visual line
+# Raised from 2.5 → 4.0 pt to handle OCR baseline jitter (characters on the
+# same physical line whose extracted Y values can differ by 3-4 pt).
+BASELINE_TOLERANCE = 4.0
+
+# Characters that look "visible" but carry no printable meaning.
+# U+FFFD = Unicode Replacement Character (corrupt / undecodable OCR glyph)
+# \x00  = Null byte     \xa0 = Non-breaking space
+_GARBAGE_CHARS = str.maketrans("", "", "\ufffd\x00\xa0")
+
+
+def _has_visible_ink(text: str) -> bool:
+    """
+    Return True only if *text* contains meaningful printable content.
+
+    Three-pass strategy:
+      1. Strip ordinary whitespace — catches blank / space-only lines.
+      2. Remove known garbage Unicode code-points (U+FFFD, null, NBSP).
+      3. Unicode-category check — at least one Letter (L*) or Number (N*)
+         must be present.  Punctuation-only content is allowed only when
+         it contains ≥ 3 non-space characters, so separator lines like
+         "___________" or "----------" are still counted, but isolated
+         OCR ghost glyphs like · (U+00B7 MIDDLE DOT) that fitz synthesises
+         when reading back corrupt PDF glyph encodings are rejected.
+    """
+    # Pass 1 — whitespace
+    stripped = text.strip()
+    if not stripped:
+        return False
+    # Pass 2 — remove known garbage code-points
+    meaningful = stripped.translate(_GARBAGE_CHARS).strip()
+    if not meaningful:
+        return False
+    # Pass 3 — Unicode category check
+    for ch in meaningful:
+        cat = unicodedata.category(ch)
+        if cat[0] in ('L', 'N'):   # Letter or Number → definitely real content
+            return True
+    # No letters or digits: allow only if there are ≥ 3 non-space chars
+    # (handles legitimate separator / underline lines in legal documents).
+    return sum(1 for c in meaningful if not c.isspace()) >= 3
 
 
 @dataclass
@@ -68,19 +116,19 @@ def extract_visual_lines(page: fitz.Page, page_num: int) -> List[VisualLine]:
         if block.get("type") != 0:   # type 0 = text block
             continue
         for line in block.get("lines", []):
-            # STRICT VISIBILITY CHECK: Does this entire line have 'ink'?
-            # We join all spans in the line and strip it. If empty, skip the line.
-            line_content = "".join([span.get("text", "") for span in line.get("spans", [])])
-            if not line_content.strip():
+            # STRICT VISIBILITY CHECK: entire line must have real ink.
+            # _has_visible_ink() strips whitespace AND garbage Unicode (U+FFFD)
+            # so corrupt OCR glyphs cannot inflate the line count.
+            line_content = "".join(span.get("text", "") for span in line.get("spans", []))
+            if not _has_visible_ink(line_content):
                 continue
 
             for span in line.get("spans", []):
                 text = span.get("text", "")
-                if not text.strip():
+                if not _has_visible_ink(text):   # also filter span-level garbage
                     continue
                 bbox = fitz.Rect(span["bbox"])
-                is_excluded = _span_in_exclusion(bbox, exclusions)
-                if is_excluded:
+                if _span_in_exclusion(bbox, exclusions):
                     continue
                 all_spans.append({
                     "text": text,
@@ -92,22 +140,36 @@ def extract_visual_lines(page: fitz.Page, page_num: int) -> List[VisualLine]:
     if not all_spans:
         return []
 
-    # Sort spans top-to-bottom, left-to-right
-    all_spans.sort(key=lambda s: (round(s["bbox"].y0 / BASELINE_TOLERANCE), s["bbox"].x0))
+    # Sort spans strictly top-to-bottom, then left-to-right
+    all_spans.sort(key=lambda s: (s["bbox"].y0, s["bbox"].x0))
 
-    # Group into visual lines by baseline Y proximity
-    groups: List[List[dict]] = []
+    # Group into visual lines by baseline Y proximity.
+    # IMPORTANT: use the RUNNING AVERAGE Y of the group as the representative,
+    # not just the first span's Y.  Using only the first span causes cumulative
+    # drift: if spans A, B, C each shift +2pt from their predecessor, A→B and
+    # B→C are both within tolerance but A→C is not — resulting in phantom splits
+    # and the irregular counting pattern (10, 8, 7, 9 …) reported by users.
+    groups: List[List[dict]] = []   # each item: list of span dicts
+    group_avg_y: List[float] = []   # parallel list: running average y0
+
     for span in all_spans:
         y0 = span["bbox"].y0
         placed = False
-        for group in reversed(groups):
-            rep_y0 = group[0]["bbox"].y0
-            if abs(y0 - rep_y0) <= BASELINE_TOLERANCE:
-                group.append(span)
+        # Check groups in reverse (most recently opened group first)
+        for i in range(len(groups) - 1, -1, -1):
+            if abs(y0 - group_avg_y[i]) <= BASELINE_TOLERANCE:
+                groups[i].append(span)
+                # Update running average
+                n = len(groups[i])
+                group_avg_y[i] = group_avg_y[i] * (n - 1) / n + y0 / n
                 placed = True
+                break
+            # If we've gone more than 2× tolerance above current span, stop searching
+            if group_avg_y[i] < y0 - BASELINE_TOLERANCE * 2:
                 break
         if not placed:
             groups.append([span])
+            group_avg_y.append(y0)
 
     # Build VisualLine objects
     visual_lines: List[VisualLine] = []
