@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tenthline — Court-Ready Document Numbering</title>
+  <meta name="description" content="Automatically add court-compliant tenth-line numbers to PDF and Word documents." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="header">
+    <div class="header-inner">
+      <div class="logo">
+        <svg class="logo-icon" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <rect x="1" y="1" width="34" height="34" rx="8" stroke="url(#lg)" stroke-width="2"/>
+          <line x1="9" y1="9" x2="27" y2="9" stroke="url(#lg)" stroke-width="2" stroke-linecap="round"/>
+          <line x1="9" y1="15" x2="27" y2="15" stroke="#4a5568" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="9" y1="21" x2="27" y2="21" stroke="#4a5568" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="9" y1="27" x2="27" y2="27" stroke="url(#lg)" stroke-width="2" stroke-linecap="round"/>
+          <defs>
+            <linearGradient id="lg" x1="0" y1="0" x2="36" y2="36" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#c9a84c"/>
+              <stop offset="100%" stop-color="#e8c97e"/>
+            </linearGradient>
+          </defs>
+        </svg>
+        <span class="logo-text">Tenthline</span>
+      </div>
+      <span class="badge">Court-Ready</span>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="hero-inner">
+      <p class="hero-eyebrow">Legal Document Tool</p>
+      <h1 class="hero-title">Tenth-Line Numbering<br /><em>for Court Filings</em></h1>
+      <p class="hero-sub">Upload a PDF or Word document. We detect every visual line — including wrapped text — and stamp the margin with court-compliant numbers every 10 lines.</p>
+    </div>
+  </section>
+
+  <main class="workspace">
+    <section class="panel panel--upload" aria-label="Upload and options">
+
+      <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="Upload document">
+        <div class="dropzone-inner">
+          <div class="dropzone-icon" aria-hidden="true">
+            <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M32 44V20M32 20l-8 8M32 20l8 8" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M16 44h32" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+              <rect x="8" y="8" width="48" height="48" rx="10" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 3"/>
+            </svg>
+          </div>
+          <p class="dropzone-label">Drop your document here</p>
+          <p class="dropzone-sub">PDF or DOCX &nbsp;·&nbsp; Max 50 MB</p>
+          <button class="btn btn--ghost" id="browse-btn" type="button">Browse files</button>
+          <input type="file" id="file-input" accept=".pdf,.docx" hidden />
+        </div>
+      </div>
+
+      <div class="file-info" id="file-info" hidden>
+        <div class="file-info-icon">📄</div>
+        <div class="file-info-details">
+          <span class="file-info-name" id="file-info-name"></span>
+          <span class="file-info-size" id="file-info-size"></span>
+        </div>
+        <button class="file-info-clear" id="file-clear-btn" title="Remove file">✕</button>
+      </div>
+
+      <div class="options-card">
+        <h2 class="options-title">Numbering Options</h2>
+
+        <div class="option-group">
+          <label class="option-label" for="opt-interval">Number every <strong id="interval-display">10</strong> lines</label>
+          <input class="slider" type="range" id="opt-interval" min="1" max="50" value="10" />
+        </div>
+
+        <div class="option-group">
+          <label class="option-label" for="opt-skip">Skip first <strong id="skip-display">1</strong> page(s)</label>
+          <input class="slider" type="range" id="opt-skip" min="0" max="10" value="1" />
+          <p class="option-hint">Keeps cover pages unnumbered.</p>
+        </div>
+
+        <div class="option-group">
+          <label class="option-label">Margin side</label>
+          <div class="radio-group">
+            <label class="radio-option">
+              <input type="radio" name="margin_side" value="left" id="margin-left" checked />
+              <span class="radio-custom"></span>Left margin
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="margin_side" value="right" id="margin-right" />
+              <span class="radio-custom"></span>Right margin
+            </label>
+          </div>
+        </div>
+
+        <div class="option-group option-group--toggle">
+          <div class="toggle-label">
+            <span>Draw gutter rule line</span>
+            <span class="toggle-hint">Faint vertical line in the margin</span>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="opt-rule" checked />
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </label>
+        </div>
+      </div>
+
+      <button class="btn btn--primary btn--full" id="process-btn" type="button" disabled>
+        <span class="btn-icon">⚖</span>
+        <span id="process-btn-label">Number My Document</span>
+      </button>
+
+      <div class="error-box" id="error-box" hidden role="alert">
+        <span class="error-icon">⚠</span>
+        <span id="error-text"></span>
+      </div>
+    </section>
+
+    <section class="panel panel--preview" aria-label="Document preview">
+      <div class="preview-header">
+        <h2 class="preview-title">Preview</h2>
+        <button class="btn btn--download" id="download-btn" hidden>
+          <span>↓</span> Download PDF
+        </button>
+      </div>
+
+      <div class="preview-frame-wrapper" id="preview-wrapper">
+        <div class="preview-placeholder" id="preview-placeholder">
+          <div class="preview-placeholder-icon">
+            <svg viewBox="0 0 80 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="5" y="5" width="70" height="90" rx="6" stroke="currentColor" stroke-width="2"/>
+              <line x1="14" y1="22" x2="66" y2="22" stroke="currentColor" stroke-width="1.5"/>
+              <line x1="14" y1="30" x2="66" y2="30" stroke="currentColor" stroke-width="1"/>
+              <line x1="14" y1="38" x2="66" y2="38" stroke="currentColor" stroke-width="1"/>
+              <line x1="14" y1="46" x2="66" y2="46" stroke="currentColor" stroke-width="1"/>
+              <line x1="14" y1="54" x2="66" y2="54" stroke="currentColor" stroke-width="1.5"/>
+              <text x="7" y="25" font-size="6" fill="currentColor" font-family="monospace">10</text>
+              <text x="7" y="57" font-size="6" fill="currentColor" font-family="monospace">20</text>
+            </svg>
+          </div>
+          <p>Your numbered document will appear here</p>
+        </div>
+        <iframe id="preview-iframe" class="preview-iframe" title="Numbered document preview" hidden></iframe>
+      </div>
+
+      <div class="processing-overlay" id="processing-overlay" hidden>
+        <div class="spinner"></div>
+        <p class="processing-label" id="processing-label">Analysing document…</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>Tenthline &nbsp;·&nbsp; Built for legal professionals &nbsp;·&nbsp; Runs locally, files are never stored</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
