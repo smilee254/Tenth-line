@@ -72,6 +72,7 @@ async def process_document(
 
     try:
         if file_type == "pdf":
+            # PDF: stamp gutter numbers directly onto the existing PDF
             result_bytes = annotate_pdf(
                 raw,
                 interval=interval,
@@ -79,7 +80,13 @@ async def process_document(
                 margin_side=margin_side,
                 draw_rule=draw_rule,
             )
+            stem = (file.filename or "document").rsplit(".", 1)[0]
+            download_name = f"{stem}_tenthlined.pdf"
+            media_type = "application/pdf"
         else:
+            # DOCX: pre-process fonts → LibreOffice → PDF → annotate
+            # Font pre-processing replaces "Bookman Old Style" → "URW Bookman"
+            # so LibreOffice uses the installed font natively (no reflow).
             result_bytes = process_docx(
                 raw,
                 interval=interval,
@@ -87,15 +94,15 @@ async def process_document(
                 margin_side=margin_side,
                 draw_rule=draw_rule,
             )
+            stem = (file.filename or "document").rsplit(".", 1)[0]
+            download_name = f"{stem}_tenthlined.pdf"
+            media_type = "application/pdf"
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    stem = (file.filename or "document").rsplit(".", 1)[0]
-    download_name = f"{stem}_tenthlined.pdf"
-
     return StreamingResponse(
         io.BytesIO(result_bytes),
-        media_type="application/pdf",
+        media_type=media_type,
         headers={
             "Content-Disposition": f'attachment; filename="{download_name}"',
             "X-Filename": download_name,

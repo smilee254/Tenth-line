@@ -23,8 +23,8 @@ RULE_WIDTH      = 0.4
 TOP_MARGIN_SKIP    = 72.0              # Skip text above 1 inch (headers)
 BOTTOM_MARGIN_SKIP = 72.0              # Skip text below 1 inch (footers)
 
-# Font path for Bookman Old Style (Bold/Demi)
-BOOKMAN_BOLD_PATH = "/usr/share/fonts/opentype/urw-base35/URWBookman-Demi.otf"
+# Font path for Bookman Old Style (Regular/Light)
+BOOKMAN_PATH = "/usr/share/fonts/opentype/urw-base35/URWBookman-Light.otf"
 
 
 def _draw_gutter_rule(page: fitz.Page, margin_side: str) -> None:
@@ -57,12 +57,12 @@ def _stamp_number(
     safe_gutter_x = min(GUTTER_X_LEFT, page_min_x - 12.0)
 
     # Use a fallback font name if Bookman isn't properly registered
-    font_name = "bookman-bold"
+    font_name = "bookman"
     
     try:
         text_width = fitz.get_text_length(label, fontsize=NUMBER_FONTSIZE, fontname=font_name)
     except ValueError:
-        # Fallback to 'helv' for length calculation if 'bookman-bold' is not recognized globally by fitz
+        # Fallback to 'helv' for length calculation if 'bookman' is not recognized globally by fitz
         text_width = fitz.get_text_length(label, fontsize=NUMBER_FONTSIZE, fontname="helv")
 
     if margin_side == "left":
@@ -132,12 +132,12 @@ def annotate_pdf(
         page_min_x = min(vl.x_start for vl in body_lines) if body_lines else GUTTER_X_LEFT
 
         # Register Bookman font for this page
-        if Path(BOOKMAN_BOLD_PATH).exists():
+        if Path(BOOKMAN_PATH).exists():
             # Use a standard name that fitz can potentially recognize globally after registration
-            page.insert_font(fontfile=BOOKMAN_BOLD_PATH, fontname="bookman-bold")
+            page.insert_font(fontfile=BOOKMAN_PATH, fontname="bookman")
         else:
-            # Fallback to Times-Bold if Bookman is missing
-            page.insert_font(fontname="bookman-bold", fontname_res="ti-bo")
+            # Fallback to Times-Roman if Bookman is missing
+            page.insert_font(fontname="bookman", fontname_res="ti-ro")
 
         if draw_rule:
             _draw_gutter_rule(page, margin_side)
