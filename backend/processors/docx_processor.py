@@ -50,17 +50,15 @@ FONT_SUBSTITUTIONS = {
 _XML_EXTENSIONS = {".xml", ".rels"}
 
 
-def _preprocess_docx_fonts(docx_bytes: bytes) -> bytes:
+def _preprocess_docx_fonts(input_path: str, output_path: str) -> None:
     """
     Replace Windows-specific font names in a DOCX with their installed
     Linux equivalents directly in the ZIP XML, so LibreOffice finds the
     font natively without falling back to its own imprecise substitution.
     """
-    buf_in  = io.BytesIO(docx_bytes)
-    buf_out = io.BytesIO()
 
-    with zipfile.ZipFile(buf_in, "r") as zin, \
-         zipfile.ZipFile(buf_out, "w", compression=zipfile.ZIP_DEFLATED) as zout:
+    with zipfile.ZipFile(input_path, "r") as zin, \
+         zipfile.ZipFile(output_path, "w", compression=zipfile.ZIP_DEFLATED) as zout:
 
         for item in zin.infolist():
             data = zin.read(item.filename)
@@ -76,8 +74,6 @@ def _preprocess_docx_fonts(docx_bytes: bytes) -> bytes:
                     pass  # Leave unparseable entries as-is
 
             zout.writestr(item, data)
-
-    return buf_out.getvalue()
 
 
 # ── LibreOffice helpers ────────────────────────────────────────────────────────
@@ -101,9 +97,9 @@ def _find_soffice() -> Optional[str]:
     return None
 
 
-def convert_docx_to_pdf_bytes(docx_bytes: bytes) -> bytes:
+def convert_docx_to_pdf(input_docx_path: str, output_pdf_path: str) -> None:
     """
-    Convert raw .docx bytes → raw PDF bytes via LibreOffice headless.
+    Convert raw .docx path → raw PDF path via LibreOffice headless.
 
     Font pre-processing is applied first to prevent text reflow.
     """
@@ -114,14 +110,11 @@ def convert_docx_to_pdf_bytes(docx_bytes: bytes) -> bytes:
             "Install with: sudo apt install libreoffice"
         )
 
-    # Pre-process fonts BEFORE handing to LibreOffice
-    processed_docx = _preprocess_docx_fonts(docx_bytes)
-
     with tempfile.TemporaryDirectory() as tmpdir:
-        docx_path = Path(tmpdir) / "input.docx"
-        pdf_path  = Path(tmpdir) / "input.pdf"
-
-        docx_path.write_bytes(processed_docx)
+        preprocessed_docx = Path(tmpdir) / "preprocessed.docx"
+        
+        # Pre-process fonts BEFORE handing to LibreOffice
+        _preprocess_docx_fonts(input_docx_path, str(preprocessed_docx))
 
         result = subprocess.run(
             [
@@ -129,35 +122,40 @@ def convert_docx_to_pdf_bytes(docx_bytes: bytes) -> bytes:
                 "--headless",
                 "--convert-to", "pdf",
                 "--outdir", tmpdir,
-                str(docx_path),
+                str(preprocessed_docx),
             ],
             capture_output=True,
-            timeout=120,
+            timeout=300,  # Increased from 120s to handle massive 40MB+ documents
         )
 
         if result.returncode != 0:
             stderr = result.stderr.decode(errors="replace")
             raise RuntimeError(f"LibreOffice conversion failed:\n{stderr}")
 
-        if not pdf_path.exists():
+        generated_pdf = Path(tmpdir) / "preprocessed.pdf"
+        if not generated_pdf.exists():
             raise RuntimeError("LibreOffice did not produce an output PDF.")
 
-        return pdf_path.read_bytes()
+        shutil.copy(generated_pdf, output_pdf_path)
 
 
 def process_docx(
-    docx_bytes: bytes,
+    input_docx_path: str,
+    output_pdf_path: str,
     interval: int = 10,
     skip_pages: int = 1,
     margin_side: str = "left",
     draw_rule: bool = True,
-) -> bytes:
-    """Full pipeline: .docx bytes → annotated PDF bytes (with all features)."""
-    pdf_bytes = convert_docx_to_pdf_bytes(docx_bytes)
-    return annotate_pdf(
-        pdf_bytes,
-        interval=interval,
-        skip_pages=skip_pages,
-        margin_side=margin_side,
-        draw_rule=draw_rule,
-    )
+) -> None:
+    """Full pipeline: .docx path → annotated PDF path (with all features)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        temp_pdf = Path(tmpdir) / "temp.pdf"
+        convert_docx_to_pdf(input_docx_path, str(temp_pdf))
+        annotate_pdf(
+            str(temp_pdf),
+            output_pdf_path,
+            interval=interval,
+            skip_pages=skip_pages,
+            margin_side=margin_side,
+            draw_rule=draw_rule,
+        )

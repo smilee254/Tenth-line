@@ -20,8 +20,11 @@ NUMBER_FONTSIZE = 12.0
 NUMBER_COLOR    = (0.0, 0.0, 0.0)      # Pure black for better legibility at 12pt
 RULE_COLOR      = (0.75, 0.75, 0.75)   # light grey
 RULE_WIDTH      = 0.4
-TOP_MARGIN_SKIP    = 72.0              # Skip text above 1 inch (headers)
-BOTTOM_MARGIN_SKIP = 72.0              # Skip text below 1 inch (footers)
+TOP_MARGIN_SKIP    = 50.0              # Skip text above ~0.7 inch (running headers)
+                                       # 72pt (1") was too aggressive — it silently
+                                       # excluded first body lines on docs with tight
+                                       # margins, shifting all stamp positions by -1.
+BOTTOM_MARGIN_SKIP = 72.0             # Skip text below 1 inch (footers)
 
 # Font path for Bookman Old Style (Regular/Light)
 BOOKMAN_PATH = "/usr/share/fonts/opentype/urw-base35/URWBookman-Light.otf"
@@ -86,26 +89,25 @@ def _stamp_number(
 
 
 def annotate_pdf(
-    pdf_bytes: bytes,
+    input_path: str,
+    output_path: str,
     interval: int = 10,
     skip_pages: int = 1,
     margin_side: str = "left",
     draw_rule: bool = True,
-) -> bytes:
+) -> None:
     """
     Main entry point.
 
     Args:
-        pdf_bytes:   Raw PDF file content.
+        input_path:  Path to the raw PDF file.
+        output_path: Path where the annotated PDF will be saved.
         interval:    Stamp a number every N visual lines (default 10).
         skip_pages:  Number of pages to skip from the front (default 1 = cover).
         margin_side: "left" or "right".
         draw_rule:   Whether to draw the faint vertical gutter rule.
-
-    Returns:
-        Modified PDF as bytes.
     """
-    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    doc = fitz.open(input_path)
     total_pages = len(doc)
 
     for page_idx in range(total_pages):
@@ -146,6 +148,5 @@ def annotate_pdf(
             if idx % interval == 0:
                 _stamp_number(page, idx, vl.y_origin, margin_side, page_min_x=page_min_x)
 
-    output = doc.tobytes(garbage=4, deflate=True)
+    doc.save(output_path, garbage=4, deflate=True)
     doc.close()
-    return output

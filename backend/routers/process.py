@@ -4,10 +4,15 @@ Accepts a file upload + JSON options, returns an annotated PDF.
 """
 
 import io
+import os
+import shutil
+import tempfile
 from typing import Literal, Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse
+from starlette.background import BackgroundTask
+from starlette.concurrency import run_in_threadpool
 
 from backend.processors.pdf_processor import annotate_pdf
 from backend.processors.docx_processor import process_docx
@@ -37,6 +42,16 @@ def _detect_file_type(filename: str, content_type: str) -> str:
     )
 
 
+def _cleanup_files(*paths: str):
+    """Background task to remove temporary files after response is sent."""
+    for path in paths:
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+        except Exception:
+            pass
+
+
 @router.post("/process")
 async def process_document(
     file: UploadFile = File(...),
@@ -48,17 +63,9 @@ async def process_document(
     """
     Process a PDF or DOCX file and return an annotated PDF with court-style
     tenth-line numbers in the margin.
-
-    Form fields:
-      - file        : The uploaded .pdf or .docx
-      - interval    : Number every N-th line (default 10)
-      - skip_pages  : Pages to leave unnumbered from the front (default 1)
-      - margin_side : "left" or "right" (default "left")
-      - draw_rule   : Whether to draw a faint vertical gutter rule (default true)
     """
-    raw = await file.read()
-    if not raw:
-        raise HTTPException(status_code=422, detail="Uploaded file is empty.")
+    if not file.filename:
+        raise HTTPException(status_code=422, detail="Uploaded file has no filename.")
 
     file_type = _detect_file_type(file.filename or "", file.content_type or "")
 
@@ -70,41 +77,48 @@ async def process_document(
     if margin_side not in ("left", "right"):
         raise HTTPException(status_code=422, detail="margin_side must be 'left' or 'right'.")
 
+    # 1. Stream the uploaded file to a temporary file on disk (Saves RAM)
+    fd_in, temp_in = tempfile.mkstemp(suffix=f".{file_type}")
+    with os.fdopen(fd_in, "wb") as f_in:
+        shutil.copyfileobj(file.file, f_in)
+
+    fd_out, temp_out = tempfile.mkstemp(suffix=".pdf")
+    os.close(fd_out) # We only need the path, processor will overwrite
+
     try:
+        # 2. Process off the main thread (Prevents freezing the server)
         if file_type == "pdf":
-            # PDF: stamp gutter numbers directly onto the existing PDF
-            result_bytes = annotate_pdf(
-                raw,
+            await run_in_threadpool(
+                annotate_pdf,
+                temp_in,
+                temp_out,
                 interval=interval,
                 skip_pages=skip_pages,
                 margin_side=margin_side,
                 draw_rule=draw_rule,
             )
-            stem = (file.filename or "document").rsplit(".", 1)[0]
-            download_name = f"{stem}_tenthlined.pdf"
-            media_type = "application/pdf"
         else:
-            # DOCX: pre-process fonts → LibreOffice → PDF → annotate
-            # Font pre-processing replaces "Bookman Old Style" → "URW Bookman"
-            # so LibreOffice uses the installed font natively (no reflow).
-            result_bytes = process_docx(
-                raw,
+            await run_in_threadpool(
+                process_docx,
+                temp_in,
+                temp_out,
                 interval=interval,
                 skip_pages=skip_pages,
                 margin_side=margin_side,
                 draw_rule=draw_rule,
             )
-            stem = (file.filename or "document").rsplit(".", 1)[0]
-            download_name = f"{stem}_tenthlined.pdf"
-            media_type = "application/pdf"
-    except RuntimeError as e:
+    except Exception as e:
+        _cleanup_files(temp_in, temp_out)
         raise HTTPException(status_code=500, detail=str(e))
 
-    return StreamingResponse(
-        io.BytesIO(result_bytes),
-        media_type=media_type,
-        headers={
-            "Content-Disposition": f'attachment; filename="{download_name}"',
-            "X-Filename": download_name,
-        },
+    stem = (file.filename or "document").rsplit(".", 1)[0]
+    download_name = f"{stem}_tenthlined.pdf"
+
+    # 3. Stream the file back from disk, clean up temps when done (Saves RAM)
+    return FileResponse(
+        temp_out,
+        media_type="application/pdf",
+        filename=download_name,
+        headers={"X-Filename": download_name},
+        background=BackgroundTask(_cleanup_files, temp_in, temp_out),
     )

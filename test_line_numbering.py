@@ -98,12 +98,8 @@ if __name__ == "__main__":
     try:
         create_sample_pdf(sample_in)
         
-        with open(sample_in, "rb") as f:
-            # We use interval=10, skip_pages=1
-            processed_bytes = annotate_pdf(f.read(), interval=10, skip_pages=1)
-            
-        with open(sample_out, "wb") as f:
-            f.write(processed_bytes)
+        # Process it through our logic
+        annotate_pdf(sample_in, sample_out, interval=10, skip_pages=1, margin_side="left")
         print(f"✅ Processed document: {sample_out}")
         
         verify_numbering(sample_out)
