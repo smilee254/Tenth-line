@@ -17,13 +17,13 @@
         <svg class="logo-icon" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <rect x="1" y="1" width="34" height="34" rx="8" stroke="url(#lg)" stroke-width="2"/>
           <line x1="9" y1="9" x2="27" y2="9" stroke="url(#lg)" stroke-width="2" stroke-linecap="round"/>
-          <line x1="9" y1="15" x2="27" y2="15" stroke="#4a5568" stroke-width="1.5" stroke-linecap="round"/>
-          <line x1="9" y1="21" x2="27" y2="21" stroke="#4a5568" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="9" y1="15" x2="27" y2="15" stroke="#3a5080" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="9" y1="21" x2="27" y2="21" stroke="#3a5080" stroke-width="1.5" stroke-linecap="round"/>
           <line x1="9" y1="27" x2="27" y2="27" stroke="url(#lg)" stroke-width="2" stroke-linecap="round"/>
           <defs>
             <linearGradient id="lg" x1="0" y1="0" x2="36" y2="36" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stop-color="#c9a84c"/>
-              <stop offset="100%" stop-color="#e8c97e"/>
+              <stop offset="0%" stop-color="#a89f91"/>
+              <stop offset="100%" stop-color="#cfcbc4"/>
             </linearGradient>
           </defs>
         </svg>
@@ -35,15 +35,13 @@
 
   <section class="hero">
     <div class="hero-inner">
-      <p class="hero-eyebrow">Legal Document Tool</p>
       <h1 class="hero-title">Tenth-Line Numbering<br /><em>for Court Filings</em></h1>
-      <p class="hero-sub">Upload a PDF or Word document. We detect every visual line — including wrapped text — and stamp the margin with court-compliant numbers every 10 lines.</p>
+      <p class="hero-sub">Upload a PDF or Word document. We detect every visual line and stamp the margin with court-compliant numbers every 10 lines.</p>
     </div>
   </section>
 
   <main class="workspace">
     <section class="panel panel--upload" aria-label="Upload and options">
-
       <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="Upload document">
         <div class="dropzone-inner">
           <div class="dropzone-icon" aria-hidden="true">
@@ -71,18 +69,15 @@
 
       <div class="options-card">
         <h2 class="options-title">Numbering Options</h2>
-
         <div class="option-group">
           <label class="option-label" for="opt-interval">Number every <strong id="interval-display">10</strong> lines</label>
           <input class="slider" type="range" id="opt-interval" min="1" max="50" value="10" />
         </div>
-
         <div class="option-group">
           <label class="option-label" for="opt-skip">Skip first <strong id="skip-display">1</strong> page(s)</label>
           <input class="slider" type="range" id="opt-skip" min="0" max="10" value="1" />
           <p class="option-hint">Keeps cover pages unnumbered.</p>
         </div>
-
         <div class="option-group">
           <label class="option-label">Margin side</label>
           <div class="radio-group">
@@ -96,7 +91,6 @@
             </label>
           </div>
         </div>
-
         <div class="option-group option-group--toggle">
           <div class="toggle-label">
             <span>Draw gutter rule line</span>
@@ -106,6 +100,11 @@
             <input type="checkbox" id="opt-rule" checked />
             <span class="toggle-track"><span class="toggle-thumb"></span></span>
           </label>
+        </div>
+        <div class="option-group option-group--col">
+          <label class="option-label" for="opt-signatures">Firm Signatures to Exclude</label>
+          <input class="text-input" type="text" id="opt-signatures" placeholder="e.g., EPICOM, Smith Law" />
+          <p class="option-hint">Stamps containing these words will be ignored in the line count.</p>
         </div>
       </div>
 
@@ -127,7 +126,6 @@
           <span>↓</span> Download PDF
         </button>
       </div>
-
       <div class="preview-frame-wrapper" id="preview-wrapper">
         <div class="preview-placeholder" id="preview-placeholder">
           <div class="preview-placeholder-icon">
@@ -146,7 +144,6 @@
         </div>
         <iframe id="preview-iframe" class="preview-iframe" title="Numbered document preview" hidden></iframe>
       </div>
-
       <div class="processing-overlay" id="processing-overlay" hidden>
         <div class="spinner"></div>
         <p class="processing-label" id="processing-label">Analysing document…</p>
@@ -155,7 +152,7 @@
   </main>
 
   <footer class="footer">
-    <p>Tenthline &nbsp;·&nbsp; Built for legal professionals &nbsp;·&nbsp; Runs locally, files are never stored</p>
+    <p>Tenthline &nbsp;·&nbsp; Runs locally, files are never stored</p>
   </footer>
 
   <script src="app.js"></script>

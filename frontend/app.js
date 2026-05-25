@@ -1,18 +1,6 @@
-/**
- * app.js — Tenthline frontend logic
- *
- * Modules:
- *   FileUploader   – drag-drop + browse, file validation
- *   OptionsPanel   – reads all form controls
- *   APIClient      – posts to /api/process, returns PDF blob
- *   Previewer      – renders blob in iframe, drives download
- *   App            – wires everything together
- */
-
 'use strict';
 
-/* ── Constants ──────────────────────────────────────────────────────────────── */
-const MAX_FILE_BYTES = 50 * 1024 * 1024; // 50 MB
+const MAX_FILE_BYTES = 50 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = ['pdf', 'docx'];
 const API_ENDPOINT = '/api/process';
 
@@ -24,7 +12,6 @@ const PROCESSING_STEPS = [
   'Finalising PDF…',
 ];
 
-/* ── Helpers ────────────────────────────────────────────────────────────────── */
 function fmt_bytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -35,31 +22,21 @@ function ext(filename) {
   return filename.split('.').pop().toLowerCase();
 }
 
-/* ── FileUploader ───────────────────────────────────────────────────────────── */
 class FileUploader {
   constructor({ dropzone, fileInput, browseBtn, fileInfo, fileName, fileSize, clearBtn, onFile, onClear }) {
     this.file = null;
     this.onFile = onFile;
     this.onClear = onClear;
-
     this.dropzone = dropzone;
     this.fileInfo = fileInfo;
     this.fileName = fileName;
     this.fileSize = fileSize;
 
-    // Browse button
-    browseBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      fileInput.click();
-    });
-
-    // Dropzone click
+    browseBtn.addEventListener('click', (e) => { e.stopPropagation(); fileInput.click(); });
     dropzone.addEventListener('click', () => fileInput.click());
     dropzone.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); }
     });
-
-    // Drag events
     dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('drag-over'); });
     dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
     dropzone.addEventListener('drop', (e) => {
@@ -68,15 +45,11 @@ class FileUploader {
       const f = e.dataTransfer?.files?.[0];
       if (f) this._handleFile(f);
     });
-
-    // Input change
     fileInput.addEventListener('change', () => {
       const f = fileInput.files?.[0];
       if (f) this._handleFile(f);
-      fileInput.value = ''; // allow re-selecting same file
+      fileInput.value = '';
     });
-
-    // Clear
     clearBtn.addEventListener('click', () => this._clear());
   }
 
@@ -93,7 +66,6 @@ class FileUploader {
   _handleFile(file) {
     const err = this._validate(file);
     if (err) { this.onFile(null, err); return; }
-
     this.file = file;
     this.fileName.textContent = file.name;
     this.fileSize.textContent = fmt_bytes(file.size);
@@ -112,7 +84,6 @@ class FileUploader {
   getFile() { return this.file; }
 }
 
-/* ── OptionsPanel ───────────────────────────────────────────────────────────── */
 class OptionsPanel {
   constructor() {
     this.intervalSlider  = document.getElementById('opt-interval');
@@ -120,7 +91,7 @@ class OptionsPanel {
     this.skipSlider      = document.getElementById('opt-skip');
     this.skipDisplay     = document.getElementById('skip-display');
     this.ruleToggle      = document.getElementById('opt-rule');
-
+    this.signaturesInput = document.getElementById('opt-signatures');
     this._bind(this.intervalSlider, this.intervalDisplay);
     this._bind(this.skipSlider, this.skipDisplay);
   }
@@ -138,18 +109,12 @@ class OptionsPanel {
       skip_pages:  parseInt(this.skipSlider.value, 10),
       margin_side: marginSide,
       draw_rule:   this.ruleToggle.checked,
+      excluded_signatures: this.signaturesInput ? this.signaturesInput.value : '',
     };
   }
 }
 
-/* ── APIClient ──────────────────────────────────────────────────────────────── */
 class APIClient {
-  /**
-   * @param {File} file
-   * @param {object} options
-   * @param {function} onProgress – called with step message strings
-   * @returns {Promise<{blob: Blob, filename: string}>}
-   */
   async process(file, options, onProgress) {
     const form = new FormData();
     form.append('file', file);
@@ -157,8 +122,8 @@ class APIClient {
     form.append('skip_pages',  String(options.skip_pages));
     form.append('margin_side', options.margin_side);
     form.append('draw_rule',   options.draw_rule ? 'true' : 'false');
+    form.append('excluded_signatures', options.excluded_signatures || '');
 
-    // Cycle progress messages while waiting
     let stepIdx = 0;
     const stepTimer = setInterval(() => {
       if (stepIdx < PROCESSING_STEPS.length - 1) stepIdx++;
@@ -169,22 +134,15 @@ class APIClient {
 
     try {
       const resp = await fetch(API_ENDPOINT, { method: 'POST', body: form });
-
       clearInterval(stepTimer);
-
       if (!resp.ok) {
         let detail = `Server error (${resp.status})`;
-        try {
-          const json = await resp.json();
-          detail = json.detail || detail;
-        } catch (_) { /* ignore */ }
+        try { const json = await resp.json(); detail = json.detail || detail; } catch (_) {}
         throw new Error(detail);
       }
-
       const blob = await resp.blob();
-      const filename = (resp.headers.get('X-Filename') || 'document_tenthlined.pdf');
+      const filename = resp.headers.get('X-Filename') || 'document_tenthlined.pdf';
       return { blob, filename };
-
     } catch (err) {
       clearInterval(stepTimer);
       throw err;
@@ -192,24 +150,20 @@ class APIClient {
   }
 }
 
-/* ── Previewer ──────────────────────────────────────────────────────────────── */
 class Previewer {
   constructor({ placeholder, iframe, downloadBtn }) {
-    this.placeholder  = placeholder;
-    this.iframe       = iframe;
-    this.downloadBtn  = downloadBtn;
-    this._blobUrl     = null;
-    this._filename    = null;
-
+    this.placeholder = placeholder;
+    this.iframe      = iframe;
+    this.downloadBtn = downloadBtn;
+    this._blobUrl    = null;
+    this._filename   = null;
     downloadBtn.addEventListener('click', () => this._download());
   }
 
   show(blob, filename) {
     if (this._blobUrl) URL.revokeObjectURL(this._blobUrl);
-
     this._blobUrl  = URL.createObjectURL(blob);
     this._filename = filename;
-
     this.placeholder.hidden = true;
     this.iframe.src = this._blobUrl;
     this.iframe.hidden = false;
@@ -233,15 +187,14 @@ class Previewer {
   }
 }
 
-/* ── App ────────────────────────────────────────────────────────────────────── */
 class App {
   constructor() {
-    this.processBtn     = document.getElementById('process-btn');
-    this.processBtnLbl  = document.getElementById('process-btn-label');
-    this.errorBox       = document.getElementById('error-box');
-    this.errorText      = document.getElementById('error-text');
-    this.overlay        = document.getElementById('processing-overlay');
-    this.overlayLabel   = document.getElementById('processing-label');
+    this.processBtn    = document.getElementById('process-btn');
+    this.processBtnLbl = document.getElementById('process-btn-label');
+    this.errorBox      = document.getElementById('error-box');
+    this.errorText     = document.getElementById('error-text');
+    this.overlay       = document.getElementById('processing-overlay');
+    this.overlayLabel  = document.getElementById('processing-label');
 
     this.api      = new APIClient();
     this.options  = new OptionsPanel();
@@ -259,9 +212,9 @@ class App {
     });
 
     this.previewer = new Previewer({
-      placeholder:  document.getElementById('preview-placeholder'),
-      iframe:       document.getElementById('preview-iframe'),
-      downloadBtn:  document.getElementById('download-btn'),
+      placeholder: document.getElementById('preview-placeholder'),
+      iframe:      document.getElementById('preview-iframe'),
+      downloadBtn: document.getElementById('download-btn'),
     });
 
     this.processBtn.addEventListener('click', () => this._process());
@@ -269,34 +222,19 @@ class App {
 
   _onFile(file, err) {
     this._clearError();
-    if (err) {
-      this._showError(err);
-      this._setReady(false);
-      return;
-    }
+    if (err) { this._showError(err); this._setReady(false); return; }
     this._setReady(true);
   }
 
-  _onClear() {
-    this._setReady(false);
-    this._clearError();
-    this.previewer.reset();
-  }
+  _onClear() { this._setReady(false); this._clearError(); this.previewer.reset(); }
 
   _setReady(ready) {
     this.processBtn.disabled = !ready;
     this.processBtn.setAttribute('aria-disabled', String(!ready));
   }
 
-  _showError(msg) {
-    this.errorText.textContent = msg;
-    this.errorBox.hidden = false;
-  }
-
-  _clearError() {
-    this.errorBox.hidden = true;
-    this.errorText.textContent = '';
-  }
+  _showError(msg) { this.errorText.textContent = msg; this.errorBox.hidden = false; }
+  _clearError()   { this.errorBox.hidden = true; this.errorText.textContent = ''; }
 
   _setProcessing(active) {
     this.overlay.hidden = !active;
@@ -307,10 +245,8 @@ class App {
   async _process() {
     const file = this.uploader.getFile();
     if (!file) return;
-
     this._clearError();
     this._setProcessing(true);
-
     try {
       const opts = this.options.getOptions();
       const { blob, filename } = await this.api.process(file, opts, (msg) => {
@@ -325,5 +261,4 @@ class App {
   }
 }
 
-/* ── Bootstrap ──────────────────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => new App());
